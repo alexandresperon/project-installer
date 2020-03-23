@@ -1,6 +1,7 @@
 from lxml import etree
 from collections import defaultdict
 import subprocess
+import argparse
 import os
 import os.path as path
 
@@ -52,11 +53,14 @@ def pom_definition(pom):
     return dependencies
 
 def pom_file(workdir, artifact, version):
-    pom_file = workdir + artifact + path.sep + version + path.sep + 'pom.xml'
+    pom_file = project_path(workdir, artifact, version) + path.sep + 'pom.xml'
     if path.isfile(pom_file):
         return pom_file
     print 'Project ' + artifact + '-' + version + ' not found'
     exit_script()
+
+def project_path(workdir, artifact, version):
+    return workdir + path.sep + artifact + path.sep + version
 
 def corrects_if_module(dir_path):
     if path.isdir(dir_path):
@@ -72,15 +76,18 @@ def corrects_if_module(dir_path):
 
 def install_dependencies(dependencies, workdir):
     for dependency in dependencies:
-        path = corrects_if_module(workdir + dependency)
-        children_dependencies = pom_definition(path + path.sep + 'pom.xml')
+        project_dir_path = corrects_if_module(workdir + path.sep + dependency)
+        children_dependencies = pom_definition(project_dir_path + path.sep + 'pom.xml')
         if children_dependencies:
             install_dependencies(children_dependencies, workdir)
-        with changeDir(path):
-            print 'Installing package ' + dependency
-            status = subprocess.call(["mvn", "clean", "install"], shell=True)
-            if status != 0:
-                installation_failed(dependency)
+        install(dependency, project_dir_path)
+
+def install(dependency, project_dir_path):
+    with changeDir(project_dir_path):
+                print 'Installing package ' + dependency
+                status = subprocess.call(["mvn", "clean", "install"], shell=True)
+                if status != 0:
+                    installation_failed(dependency)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Easily clone all repositories from server.')
@@ -90,6 +97,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    dependencies = pom_definition(pom_file(args.workdir, args.artifact, args.version), args.workdir)
+    dependencies = pom_definition(pom_file(args.workdir, args.artifact, args.version))
 
-    install_dependencies(dependencies)
+    install_dependencies(dependencies, args.workdir)
+
+    project_dir_path = project_path(args.workdir, args.artifact, args.version)
+    dependency = args.artifact + path.sep + args.version
+
+    install(dependency, project_dir_path)
